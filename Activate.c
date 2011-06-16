@@ -1,8 +1,9 @@
 /*
- * spirit.c
- * Spirit jailbreak for Linux
+ * Activate.c
+ * Based off Spirit jailbreak for Linux
  *
- * Copyright (c) 2010 Joshua Hill. All Rights Reserved.
+ * Activate Copyright (c) 2011 Luke Young. All Rights Reserved.
+ * Spirit Jailbreak Copyright (c) 2010 Joshua Hill. All Rights Reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
