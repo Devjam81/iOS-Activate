@@ -104,122 +104,6 @@ char* read_file(const char *filename, uint64_t* size) {
 	return data;
 }
 
-static int send_over(afc_client_t afc, const char* source, const char* destination) {
-	FILE* fd = NULL;
-	uint64_t handle = 0;
-	afc_error_t err = 0;
-	unsigned char buffer[BUFSIZE];
-
-	fd = fopen(source, "rb");
-	if(fd == NULL) {
-		return -1;
-	}
-
-	err = afc_file_open(afc, destination, AFC_FOPEN_WR, &handle);
-	if(err != AFC_E_SUCCESS) {
-		fclose(fd);
-		return -1;
-	}
-
-	uint32_t w = 0;
-	uint32_t r = fread(buffer, 1, BUFSIZE, fd);
-	while(r > 0) {
-		afc_file_write(afc, handle, buffer, r, &w);
-		if(w <= 0) return -1;
-		r = fread(buffer, 1, BUFSIZE, fd);
-		printf(".");
-	}
-
-	return 0;
-}
-
-static void send_files_thread() {
-	lockdownd_error_t lockdownd_error = 0;
-	printf("INFO: Creating lockdownd client\n");
-	lockdownd_error = lockdownd_client_new_with_handshake(device, &lockdownd, "spirit");
-	if(lockdownd_error != LOCKDOWN_E_SUCCESS) {
-		fprintf(stderr, "ERROR: Cannot create lockdownd client\n");
-	}
-	
-	uint16_t port = 0;
-	afc_client_t afc = NULL;
-	printf("INFO: Starting AFC service\n");
-
-	lockdownd_error_t lockdown_err = lockdownd_start_service(lockdownd, "com.apple.afc", &port);
-	if (lockdown_err != LOCKDOWN_E_SUCCESS) {
-		fprintf(stderr, "ERROR: Cannot start AFC service\n");
-		return;
-	}
-
-	afc_error_t afc_err = afc_client_new(device, port, &afc);
-	if(afc_err != AFC_E_SUCCESS) {
-		fprintf(stderr, "ERROR: Cannot connect to AFC service, %d\n", afc_err);
-		return;
-	}
-	printf("INFO: Sending files via AFC.");
-	
-	plist_t node = NULL;
-	char* product_type = NULL;
-	char* product_version = NULL;
-	lockdownd_get_value(lockdownd, NULL, "ProductType", &node);
-	plist_get_string_val(node, &product_type);
-	plist_free(node);
-	node = NULL;
-
-	lockdownd_get_value(lockdownd, NULL, "ProductVersion", &node);
-	plist_get_string_val(node, &product_version);
-	plist_free(node);
-	node = NULL;
-	
-	if(lockdownd) { 
-		lockdownd_client_free(lockdownd);
-		lockdownd = NULL;
-	}
-
-	char product[512];
-	memset(product, '\0', 512);
-	snprintf(product, 512, "%s_%s", product_type, product_version);
-	printf("INFO: Found version %s\n", product);
-	
-	uint64_t size = 0;
-	char* map_data = read_file("igor/map.plist", &size);
-	if(map_data == NULL) {
-		fprintf(stderr, "ERROR: Cannot open map.plist\n");
-		afc_client_free(afc);
-		return;
-	}
-	
-	plist_t map = NULL;
-	plist_from_xml(map_data, size, &map);
-	plist_t one_dylib_node = plist_dict_get_item(map, product);
-	if(!one_dylib_node) {
-		fprintf(stderr, "ERROR: Unable to find device in maps.plist\n");
-		afc_client_free(afc);
-		return;
-	}
-	
-	char* one_dylib = NULL;
-	plist_get_string_val(one_dylib_node, &one_dylib);
-
-	afc_remove_all(afc, "spirit");
-	afc_create_directory(afc, "spirit");
-
-	printf("INFO: Sending \"install\"\n");
-	send_over(afc, "igor/install", "spirit/install");
-	printf("INFO: Sending \"one.dylib\"\n");
-	send_over(afc, one_dylib, "spirit/one.dylib");
-	printf("INFO: Sending \"freeze.tar.xz\"\n");
-	send_over(afc, "resources/freeze.tar.xz", "spirit/freeze.tar.xz");
-	printf("INFO: Sending \"bg.jpg\"\n");
-	send_over(afc, strstr(product, "iPad") != NULL ? "resources/1024x768.jpg" : "resources/320x480.jpg", "spirit/bg.jpg");
-
-
-	printf("INFO: Sending files complete\n");
-	
-	plist_free(map);
-	afc_client_free(afc);
-}
-
 static void start_restore(mobilebackup_client_t backup, plist_t files) {
 	char* uuid = NULL;
 	idevice_get_uuid(device, &uuid);
@@ -235,7 +119,7 @@ static void start_restore(mobilebackup_client_t backup, plist_t files) {
 	plist_to_bin(m1dict, &m1data, &m1size);
 
 	plist_t manifest = plist_new_dict();
-	plist_dict_insert_item(manifest, "Version", plist_new_string("2.0"));
+	plist_dict_insert_item(manifest, "Version", plist_new_string("4.0"));
 	plist_dict_insert_item(manifest, "AuthSignature", plist_new_data(sha1_of_data(m1data, m1size), 20));
 	plist_dict_insert_item(manifest, "IsEncrypted", plist_new_uint(0));
 	plist_dict_insert_item(manifest, "Data", plist_new_data(m1data, m1size));
@@ -263,7 +147,7 @@ void* add_file(plist_t files, char* crap, uint64_t crap_size, char* domain, char
 	plist_dict_insert_item(dict, "Domain", plist_new_string(domain));
 	plist_dict_insert_item(dict, "Path", plist_new_string(path));
 	plist_dict_insert_item(dict, "Greylist", plist_new_bool(0));
-	plist_dict_insert_item(dict, "Version", plist_new_string("3.0"));
+	plist_dict_insert_item(dict, "Version", plist_new_string("4.0"));
 	plist_dict_insert_item(dict, "Data", plist_new_data(crap, crap_size));
 	printf("DEBUG: Data size %llu:\n%s\n", crap_size, data_to_hex(crap, crap_size));
 
@@ -327,7 +211,7 @@ void send_file(mobilebackup_client_t backup, plist_t info, send_file_stage stage
 static void restore_thread() {
 	lockdownd_error_t lockdownd_error = 0;
 	printf("INFO: Creating lockdownd client\n");
-	lockdownd_error = lockdownd_client_new_with_handshake(device, &lockdownd, "spirit");
+	lockdownd_error = lockdownd_client_new_with_handshake(device, &lockdownd, "Activate");
 	if(lockdownd_error != LOCKDOWN_E_SUCCESS) {
 		fprintf(stderr, "ERROR: Cannot create lockdownd client\n");
 	}
@@ -356,14 +240,12 @@ static void restore_thread() {
 
 	uint64_t size = 0;
 	plist_t files =  plist_new_dict();
-	char* data = read_file("resources/overrides.plist", &size);
-	plist_t overrides = add_file(files, data, size, "HomeDomain", "Library/Preferences/SystemConfiguration/../../../../../var/db/launchd.db/com.apple.launchd/overrides.plist", 0, 0, 0600);
-	plist_t use_gmalloc = add_file(files, "", 0, "HomeDomain", "Library/Preferences/SystemConfiguration/../../../../../var/db/.launchd_use_gmalloc", 0, 0, 0600);
+	char* data = read_file("com.apple.purplebuddy.plist", &size);
+	plist_t overrides = add_file(files, data, size, "HomeDomain", "Library/Preferences/com.apple.purplebuddy.plist", 0, 0, 0600);
 
 	start_restore(backup, files);
 
 	send_file(backup, overrides, kStageAll);
-	send_file(backup, use_gmalloc, kStageAll);
 
 	printf("INFO: Completed restore\n");
 	mobilebackup_client_free(backup);
@@ -399,7 +281,6 @@ int main(int argc, char** argv) {
 	}
 
 	some_unique = (int) time(NULL);
-	send_files_thread();
 	restore_thread();
 
 	printf("INFO: Completed successfully\n");

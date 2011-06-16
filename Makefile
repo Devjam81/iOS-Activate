@@ -1,9 +1,9 @@
-all: spirit
+all: Activate
 %.o: %.c afc.h
 	gcc -std=gnu99 -c -o $@ $<
 
-spirit: spirit.o afc.o
-	gcc -o spirit spirit.o afc.o -limobiledevice -lplist -lcrypto
+Activate: Activate.o afc.o
+	gcc -o Activate Activate.o afc.o -limobiledevice -lplist -lcrypto
 
 clean:
-	rm -rf spirit *.o *.dSYM
+	rm -rf Activate *.o *.dSYM
