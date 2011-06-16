@@ -1,0 +1,8 @@
+Activate is a simple utility to activate a iOS that does not have a registered uuid.
+
+It is currently not working because the device is refusing lockdown connections in the activate mode.
+If anybody has a solution please contact me.
+
+Use at your own risk.
+
+Based of Spirit Jailbreak for Linux.
